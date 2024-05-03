@@ -1,26 +1,43 @@
-#include <glad/glad.h>
-#include <GLFW/glfw3.h>
-
-#include <iostream>
+#include "Ship.h"
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
-void processInput(GLFWwindow *window);
+void processInput(GLFWwindow *window, float x, float y, Ship*& test);
 
 // settings
 const unsigned int SCR_WIDTH = 800;
 const unsigned int SCR_HEIGHT = 600;
+float rotationAngle = 0.0f;
+int attack_cd = 0;
 
 const char *vertexShaderSource = "#version 330 core\n"
     "layout (location = 0) in vec3 aPos;\n"
+    "uniform float rotation_angle;\n"
+    "uniform float aspect_ratio;\n"
     "void main()\n"
     "{\n"
-    "   gl_Position = vec4(aPos.x, aPos.y, aPos.z, 1.0);\n"
+    "   mat4 rotation = mat4(cos(rotation_angle), -sin(rotation_angle), 0.0, 0.0,\n"
+    "                        sin(rotation_angle), cos(rotation_angle), 0.0, 0.0,\n"
+    "                        0.0,                 0.0,                  1.0, 0.0,\n"
+    "                        0.0,                 0.0,                  0.0, 1.0);\n"
+    "   gl_Position = rotation * vec4(aPos.x * aspect_ratio, aPos.y, aPos.z, 1.0);\n"
     "}\0";
+
+const char *shipShaderSource = R"(
+    #version 330 core
+    layout (location = 0) in vec3 aPos;
+    uniform mat4 transform;
+
+    void main() {
+        gl_Position = transform * vec4(aPos.x, aPos.y, aPos.z, 1.0);
+    }
+)";
+
+
 const char *fragmentShaderSource = "#version 330 core\n"
     "out vec4 FragColor;\n"
     "void main()\n"
     "{\n"
-    "   FragColor = vec4(1.0f, 0.5f, 0.2f, 1.0f);\n"
+    "   FragColor = vec4(1.0f, 1.0f, 1.0f, 1.0f);\n"
     "}\n\0";
 
 int main()
@@ -55,7 +72,6 @@ int main()
         std::cout << "Failed to initialize GLAD" << std::endl;
         return -1;
     }
-
 
     // build and compile our shader program
     // ------------------------------------
@@ -95,15 +111,14 @@ int main()
         std::cout << "ERROR::SHADER::PROGRAM::LINKING_FAILED\n" << infoLog << std::endl;
     }
     glDeleteShader(vertexShader);
-    glDeleteShader(fragmentShader);
 
     // set up vertex data (and buffer(s)) and configure vertex attributes
     // ------------------------------------------------------------------
     float vertices[] = {
-        -0.5f, -0.5f, 0.0f, // left  
-         0.5f, -0.5f, 0.0f, // right 
-         0.0f,  0.5f, 0.0f  // top   
-    }; 
+        -0.02f, -0.02f / (SCR_WIDTH / (float)SCR_HEIGHT),  // left  
+         0.02f, -0.02f / (SCR_WIDTH / (float)SCR_HEIGHT),  // right 
+         0.0f,   0.1f / (SCR_WIDTH / (float)SCR_HEIGHT)  // top   
+    };
 
     unsigned int VBO, VAO;
     glGenVertexArrays(1, &VAO);
@@ -114,7 +129,7 @@ int main()
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
     glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
 
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
 
     // note that this is allowed, the call to glVertexAttribPointer registered VBO as the vertex attribute's bound vertex buffer object so afterwards we can safely unbind
@@ -125,8 +140,42 @@ int main()
     glBindVertexArray(0); 
 
 
-    // uncomment this call to draw in wireframe polygons.
-    //glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+    unsigned int testShader = glCreateShader(GL_VERTEX_SHADER);
+    glShaderSource(testShader, 1, &shipShaderSource, NULL);
+    glCompileShader(testShader);
+    // check for shader compile errors
+    glGetShaderiv(testShader, GL_COMPILE_STATUS, &success);
+    if (!success)
+    {
+        glGetShaderInfoLog(testShader, 512, NULL, infoLog);
+        std::cout << "ERROR::SHADER::VERTEX::COMPILATION_FAILED\n" << infoLog << std::endl;
+    }
+    // link shaders
+    unsigned int testProgram = glCreateProgram();
+    glAttachShader(testProgram, testShader);
+    glAttachShader(testProgram, fragmentShader);
+    glLinkProgram(testProgram);
+    // check for linking errors
+    glGetProgramiv(testProgram, GL_LINK_STATUS, &success);
+    if (!success) {
+        glGetProgramInfoLog(testProgram, 512, NULL, infoLog);
+        std::cout << "ERROR::SHADER::PROGRAM::LINKING_FAILED\n" << infoLog << std::endl;
+    }
+    glDeleteShader(testShader);
+    glDeleteShader(fragmentShader);
+
+    Ship* test = new Ship();
+    unsigned int testB, testA;
+    glGenVertexArrays(1, &testA);
+    glGenBuffers(1, &testB);
+    // bind the Vertex Array Object first, then bind and set vertex buffer(s), and then configure vertex attributes(s).
+    glBindVertexArray(testA);
+
+    glBindBuffer(GL_ARRAY_BUFFER, testB);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(test->vertices), test->vertices, GL_STATIC_DRAW);
+
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
 
     // render loop
     // -----------
@@ -134,18 +183,36 @@ int main()
     {
         // input
         // -----
-        processInput(window);
-
+        processInput(window, vertices[4], vertices[5], test);
+        attack_cd--;
         // render
         // ------
-        glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
+        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
 
         // draw our first triangle
         glUseProgram(shaderProgram);
         glBindVertexArray(VAO); // seeing as we only have a single VAO there's no need to bind it every time, but we'll do so to keep things a bit more organized
+
+        glUniform1f(glGetUniformLocation(shaderProgram, "rotation_angle"), rotationAngle);
+        // Get the location of the aspect_ratio uniform
+        int aspectRatioLocation = glGetUniformLocation(shaderProgram, "aspect_ratio");
+        // Set the aspect ratio value
+        glUniform1f(aspectRatioLocation, SCR_WIDTH / (float)SCR_HEIGHT);
+
         glDrawArrays(GL_TRIANGLES, 0, 3);
-        // glBindVertexArray(0); // no need to unbind it every time 
+
+        glUseProgram(testProgram);
+        test->move();
+        glBindVertexArray(testA);
+
+        glUniformMatrix4fv(glGetUniformLocation(testProgram, "transform"), 1, GL_FALSE, glm::value_ptr(test->transform));
+        glDrawArrays(GL_TRIANGLES, 0, 3);
+
+        if (abs(test->vertices[0]) < 0.02f && abs(test->vertices[1]) < 0.05f ) {
+            std::cout << "Game Over - Ship hit!" << std::endl;
+            break; // End the game loop
+        }
  
         // glfw: swap buffers and poll IO events (keys pressed/released, mouse moved etc.)
         // -------------------------------------------------------------------------------
@@ -158,7 +225,7 @@ int main()
     glDeleteVertexArrays(1, &VAO);
     glDeleteBuffers(1, &VBO);
     glDeleteProgram(shaderProgram);
-
+    delete test;
     // glfw: terminate, clearing all previously allocated GLFW resources.
     // ------------------------------------------------------------------
     glfwTerminate();
@@ -167,10 +234,31 @@ int main()
 
 // process all input: query GLFW whether relevant keys are pressed/released this frame and react accordingly
 // ---------------------------------------------------------------------------------------------------------
-void processInput(GLFWwindow *window)
+void processInput(GLFWwindow *window, float x, float y, Ship*& test)
 {
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
         glfwSetWindowShouldClose(window, true);
+
+    // Rotate left
+    if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS)
+        rotationAngle -= 0.02f;
+
+    // Rotate right
+    if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS)
+        rotationAngle += 0.02f;
+
+    if(glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS){
+        if(attack_cd > 0){
+            return;
+        }
+        std::cout << abs(x - test->vertices[0]) << " " << abs(y - test->vertices[1]) << std::endl;
+        attack_cd = 100;
+        if(abs(x - test->vertices[0]) < 0.1f && abs(y - test->vertices[1]) < 0.1f){
+            delete test;
+            test = new Ship();
+        }
+    }
+
 }
 
 // glfw: whenever the window size changed (by OS or user resize) this callback function executes
