@@ -1,13 +1,15 @@
 #include "Ship.h"
+#include <vector>
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
-void processInput(GLFWwindow *window, float x, float y, Ship*& test);
+void processInput(GLFWwindow *window, float x, float y);
 
 // settings
 const unsigned int SCR_WIDTH = 800;
 const unsigned int SCR_HEIGHT = 600;
 float rotationAngle = 0.0f;
 int attack_cd = 0;
+std::vector<Ship*> ships;
 
 const char *vertexShaderSource = "#version 330 core\n"
     "layout (location = 0) in vec3 aPos;\n"
@@ -139,32 +141,7 @@ int main()
     // VAOs requires a call to glBindVertexArray anyways so we generally don't unbind VAOs (nor VBOs) when it's not directly necessary.
     glBindVertexArray(0); 
 
-
-    unsigned int testShader = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(testShader, 1, &shipShaderSource, NULL);
-    glCompileShader(testShader);
-    // check for shader compile errors
-    glGetShaderiv(testShader, GL_COMPILE_STATUS, &success);
-    if (!success)
-    {
-        glGetShaderInfoLog(testShader, 512, NULL, infoLog);
-        std::cout << "ERROR::SHADER::VERTEX::COMPILATION_FAILED\n" << infoLog << std::endl;
-    }
-    // link shaders
-    unsigned int testProgram = glCreateProgram();
-    glAttachShader(testProgram, testShader);
-    glAttachShader(testProgram, fragmentShader);
-    glLinkProgram(testProgram);
-    // check for linking errors
-    glGetProgramiv(testProgram, GL_LINK_STATUS, &success);
-    if (!success) {
-        glGetProgramInfoLog(testProgram, 512, NULL, infoLog);
-        std::cout << "ERROR::SHADER::PROGRAM::LINKING_FAILED\n" << infoLog << std::endl;
-    }
-    glDeleteShader(testShader);
-    glDeleteShader(fragmentShader);
-
-    Ship* test = new Ship();
+    ships.push_back(new Ship());
     unsigned int testB, testA;
     glGenVertexArrays(1, &testA);
     glGenBuffers(1, &testB);
@@ -172,7 +149,7 @@ int main()
     glBindVertexArray(testA);
 
     glBindBuffer(GL_ARRAY_BUFFER, testB);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(test->vertices), test->vertices, GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, 6 * sizeof(float), ships[0]->getVertices(), GL_STATIC_DRAW);
 
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
@@ -183,7 +160,7 @@ int main()
     {
         // input
         // -----
-        processInput(window, vertices[4], vertices[5], test);
+        processInput(window, vertices[4], vertices[5]);
         attack_cd--;
         // render
         // ------
@@ -202,14 +179,24 @@ int main()
 
         glDrawArrays(GL_TRIANGLES, 0, 3);
 
-        glUseProgram(testProgram);
-        test->move();
-        glBindVertexArray(testA);
+        glUseProgram(ships[0]->getProgram());
+        ships[0]->move();
+        glGenVertexArrays(1, ships[0]->getVAO());
+        glGenBuffers(1, ships[0]->getVBO());
+        // bind the Vertex Array Object first, then bind and set vertex buffer(s), and then configure vertex attributes(s).
+        glBindVertexArray(*(ships[0]->getVAO()));
 
-        glUniformMatrix4fv(glGetUniformLocation(testProgram, "transform"), 1, GL_FALSE, glm::value_ptr(test->transform));
+        glBindBuffer(GL_ARRAY_BUFFER, *(ships[0]->getVBO()));
+        glBufferData(GL_ARRAY_BUFFER, 6 * sizeof(float), ships[0]->getVertices(), GL_STATIC_DRAW);
+
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
+        glEnableVertexAttribArray(0);
+        glBindVertexArray(*(ships[0]->getVAO()));
+
+        glUniformMatrix4fv(glGetUniformLocation(ships[0]->getProgram(), "transform"), 1, GL_FALSE, glm::value_ptr(ships[0]->getTransform()));
         glDrawArrays(GL_TRIANGLES, 0, 3);
 
-        if (abs(test->vertices[0]) < 0.02f && abs(test->vertices[1]) < 0.05f ) {
+        if (abs(ships[0]->getVertices()[0]) < 0.02f && abs(ships[0]->getVertices()[1]) < 0.05f ) {
             std::cout << "Game Over - Ship hit!" << std::endl;
             break; // End the game loop
         }
@@ -225,7 +212,9 @@ int main()
     glDeleteVertexArrays(1, &VAO);
     glDeleteBuffers(1, &VBO);
     glDeleteProgram(shaderProgram);
-    delete test;
+    for(StraightLineObject* s: ships){
+        delete s;
+    }
     // glfw: terminate, clearing all previously allocated GLFW resources.
     // ------------------------------------------------------------------
     glfwTerminate();
@@ -234,7 +223,7 @@ int main()
 
 // process all input: query GLFW whether relevant keys are pressed/released this frame and react accordingly
 // ---------------------------------------------------------------------------------------------------------
-void processInput(GLFWwindow *window, float x, float y, Ship*& test)
+void processInput(GLFWwindow *window, float x, float y)
 {
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
         glfwSetWindowShouldClose(window, true);
@@ -251,11 +240,13 @@ void processInput(GLFWwindow *window, float x, float y, Ship*& test)
         if(attack_cd > 0){
             return;
         }
-        std::cout << abs(x - test->vertices[0]) << " " << abs(y - test->vertices[1]) << std::endl;
-        attack_cd = 100;
-        if(abs(x - test->vertices[0]) < 0.1f && abs(y - test->vertices[1]) < 0.1f){
-            delete test;
-            test = new Ship();
+        // std::cout << abs(x - ships[0]->getVertices()[0]) << " " << abs(y - ships[0]->getVertices()[1]) << std::endl;
+        for(Ship* s: ships){
+            attack_cd = 100;
+            if(abs(x - ships[0]->getVertices()[0]) < 0.1f && abs(y - ships[0]->getVertices()[1]) < 0.1f){
+                delete ships[0];
+                ships[0] = new Ship();
+            }
         }
     }
 
