@@ -160,6 +160,14 @@ int main()
     {
         // input
         // -----
+        float cosAngle = cos(rotationAngle);
+        float sinAngle = sin(rotationAngle);
+        vertices[0] = -0.02f * cosAngle - (-0.02f / (SCR_WIDTH / (float)SCR_HEIGHT)) * sinAngle;
+        vertices[1] = -0.02f * sinAngle + (-0.02f / (SCR_WIDTH / (float)SCR_HEIGHT)) * cosAngle;
+        vertices[2] = 0.02f * cosAngle - (-0.02f / (SCR_WIDTH / (float)SCR_HEIGHT)) * sinAngle;
+        vertices[3] = 0.02f * sinAngle + (-0.02f / (SCR_WIDTH / (float)SCR_HEIGHT)) * cosAngle;
+        vertices[4] = 0.0f * cosAngle - (0.1f / (SCR_WIDTH / (float)SCR_HEIGHT)) * sinAngle;
+        vertices[5] = 0.0f * sinAngle + (0.1f / (SCR_WIDTH / (float)SCR_HEIGHT)) * cosAngle;
         processInput(window, vertices[4], vertices[5]);
         attack_cd--;
         // render
@@ -196,7 +204,7 @@ int main()
         glUniformMatrix4fv(glGetUniformLocation(ships[0]->getProgram(), "transform"), 1, GL_FALSE, glm::value_ptr(ships[0]->getTransform()));
         glDrawArrays(GL_TRIANGLES, 0, 3);
 
-        if (abs(ships[0]->getVertices()[0]) < 0.02f && abs(ships[0]->getVertices()[1]) < 0.05f ) {
+        if (abs(ships[0]->getVertices()[0]) < 0.001f && abs(ships[0]->getVertices()[1]) < 0.001f ) {
             std::cout << "Game Over - Ship hit!" << std::endl;
             break; // End the game loop
         }
@@ -240,7 +248,6 @@ void processInput(GLFWwindow *window, float x, float y)
         if(attack_cd > 0){
             return;
         }
-        // std::cout << abs(x - ships[0]->getVertices()[0]) << " " << abs(y - ships[0]->getVertices()[1]) << std::endl;
         for(Ship* s: ships){
             attack_cd = 100;
             if(abs(x - ships[0]->getVertices()[0]) < 0.1f && abs(y - ships[0]->getVertices()[1]) < 0.1f){
